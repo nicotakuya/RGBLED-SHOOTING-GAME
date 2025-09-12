@@ -1,0 +1,325 @@
+//---------------------------------------------------------
+// Capture for HSP 3   by takuya matsubara
+// ・LEDゲームの画面をキャプチャします。
+//---------------------------------------------------------
+#include "hspext.as"
+
+#define COL_MAX  16  //カラーテーブルの数
+#define BINPACK   8  //1バイトパックするbit数
+#define BITPIX    4  //1ピクセルあたりのビット数
+#define INFOHSIZE 40
+#define FILEHSIZE 14
+#define TABLESIZE  4
+
+#define LEDWIDTH  32	//width pixel
+#define LEDHEIGHT 16	//height pixel
+#define IMGSIZE 512		//32*16 bytes
+#define SKIPFRAME 2
+#define FRAMEMAX  50
+
+#define BARHEIGHT 25
+#define DOTSZ 24
+
+#define ANIMEFLAG_IDLE 0
+#define ANIMEFLAG_PLAY 1
+#define ANIMEFLAG_LIVE 2
+#define ANIMEFLAG_CAPTURE 3
+
+dim red,8
+dim green,8
+dim blue,8
+red(0)=0  :green(0)=0  :blue(0)=0
+red(1)=0  :green(1)=0  :blue(1)=255
+red(2)=255:green(2)=0  :blue(2)=0
+red(3)=255:green(3)=0  :blue(3)=255
+red(4)=0  :green(4)=255:blue(4)=0
+red(5)=0  :green(5)=255:blue(5)=255
+red(6)=255:green(6)=255:blue(6)=0
+red(7)=255:green(7)=255:blue(7)=255
+
+sdim livebuf,IMGSIZE
+sdim buf,(IMGSIZE*FRAMEMAX)
+
+dispw = DOTSZ*LEDWIDTH
+disph = DOTSZ*LEDHEIGHT
+
+screen 0,800,512,0,0,0
+flag_anime=ANIMEFLAG_IDLE
+flag_comm =0
+
+objsize 70,BARHEIGHT
+pos 0,0
+button gosub "Bin Load",*led_load
+pos 70,0
+button gosub "Open",*connect
+pos 70*2,0
+button gosub "Capture",*capture
+pos 70*3,0
+button gosub "Play/Stop",*playstop
+pos 70*4,0
+button gosub "BMP save",*frame_save
+pos 70*5,0
+button gosub "Bin save",*led_save
+
+pos 70*6+10,0
+print "COMM"
+pos 70*6+50,0
+comnum=1
+input comnum,32,20,2	
+
+color 0,0,0
+boxf 0,0+BARHEIGHT,dispw,disph+BARHEIGHT
+title "Gamen Capture"
+
+framenum=0
+nodata=0
+capcnt=0
+repeat
+	wait 5
+	if((flag_anime == ANIMEFLAG_LIVE)|(flag_anime == ANIMEFLAG_CAPTURE)){
+			repeat
+				comgetc a	//recv 1byte
+				if(stat != 0){
+					poke livebuf,capcnt,a
+					capcnt++
+					nodata=0
+				}else{
+					nodata++
+					if(nodata>25){		//TIMEOUT
+						capcnt=0
+						nodata=0
+					}
+					break
+				}
+				if(capcnt >= IMGSIZE){
+					capcnt=0
+					gosub *drawlivebuf
+					skipf = (skipf+1) \ SKIPFRAME				
+					if((skipf==0)&&(flag_anime == ANIMEFLAG_CAPTURE)){
+						for i,0,IMGSIZE
+							d=peek(livebuf,i)
+							poke buf,(framenum*IMGSIZE)+i,d
+						next
+						framenum ++
+						title "Capture "+strf("%d",framenum)
+						if(framenum >= FRAMEMAX){
+							title "Capture ...End"
+							flag_anime = ANIMEFLAG_IDLE
+							break
+						}
+					}
+				}
+			loop
+			continue
+	}
+	if(flag_anime == ANIMEFLAG_PLAY){
+		framenum ++
+		if(framenum >= FRAMEMAX):framenum=0
+		title "playing frame"+strf("%02d",framenum+1)+"/"+strf("%d",FRAMEMAX)
+
+		for i,0,IMGSIZE
+			d = peek(buf,(framenum*IMGSIZE)+i)
+			poke livebuf,i,d
+		next
+		gosub *drawlivebuf
+		wait 5
+	}
+loop	
+end
+//---------------------------------
+*drawlivebuf
+	redraw 0
+	ptr = 0
+	for y,0,LEDHEIGHT
+		for x,0,LEDWIDTH
+			temp = peek(livebuf,ptr)
+			if temp>7:temp=7
+			color red(temp),green(temp),blue(temp)
+			x1 = x*DOTSZ
+			y1 = y*DOTSZ + BARHEIGHT
+			boxf x1,y1,x1+DOTSZ-2,y1+DOTSZ-2
+			ptr++
+		next
+	next
+	redraw 1
+	return
+	
+*connect_open
+	if(flag_comm = 0){
+		comopen comnum,"baud=115200 parity=N data=8 stop=1"
+		if stat : dialog "COM"+comnum+"は使えません" : return
+		comput "A"	;送信
+		nodata =0
+		repeat
+			comgetc a	//recv 1byte
+			if(stat==0){
+				wait 1 //10ms
+				nodata++
+				if(nodata > 150){
+					nodata=0
+					break
+				}
+			}
+		loop
+		flag_comm=1
+		capcnt=0
+	}
+	return
+
+*connect_close
+	if(flag_comm = 1){
+		comclose
+		flag_comm=0
+		flag_anime=ANIMEFLAG_IDLE
+	}
+	return
+
+*connect
+	if(flag_comm =0){
+		gosub *connect_open
+		flag_anime=ANIMEFLAG_LIVE
+		title "OPEN COMM"+str(comnum)
+	}else{
+		gosub *connect_close
+		title "CLOSE COMM"
+	}
+	return
+
+*capture
+	gosub *connect_open
+	flag_anime=ANIMEFLAG_CAPTURE
+	framenum=0
+	return
+	
+*playstop
+	gosub *connect_close
+	if(flag_anime = ANIMEFLAG_IDLE){
+		flag_anime = ANIMEFLAG_PLAY
+	}else{
+		flag_anime = ANIMEFLAG_IDLE
+	}
+	return
+	
+*led_load
+	gosub *connect_close
+	dialog "led",16,"ledﾊﾞｲﾅﾘ"
+	if(refstr=""):return
+	bload refstr,buf
+	flag_anime=ANIMEFLAG_PLAY
+	framenum=0
+	return
+
+*led_save
+	gosub *connect_close
+	dialog "led",17,"ledﾊﾞｲﾅﾘ"
+	if(refstr=""):return
+	bsave refstr,buf,IMGSIZE*FRAMEMAX
+	return
+
+*frame_save
+	gosub *connect_close
+	dialog "save to LEDANIxx.BMP",2
+	if (stat = 7):return
+	for fnum,0,FRAMEMAX
+		fname = "ledani"+strf("%02d",fnum+1)+".bmp"
+		for i,0,IMGSIZE
+			d = peek(buf,(fnum*IMGSIZE)+i)
+			poke livebuf,i,d
+		next
+		gosub *drawlivebuf		
+		title "saving "+fname
+		gosub *bmp_save
+	next
+	dialog "complate"
+	return
+	
+*bmp_save
+	bmpx=0
+	bmpy=BARHEIGHT
+	bmpw=LEDWIDTH*DOTSZ
+	bmph=LEDHEIGHT*DOTSZ
+		
+    lHeadSize = (INFOHSIZE + FILEHSIZE + (TABLESIZE * COL_MAX)) //ヘッダサイズ
+    lDataSize = (bmpw * (BINPACK / BITPIX) * bmph)  //データサイズ
+    lTotalSize = lDataSize + lHeadSize //ファイル全体サイズ
+	sdim fbuf,lTotalSize
+
+ 	fp=0
+    //--------------file header
+    a= 0x42:gosub *savebyte
+    a= 0x4D:gosub *savebyte
+    a= lTotalSize:gosub *savelong //ファイル全体サイズ
+    a= 0:gosub *savelong
+    a= lHeadSize:gosub *savelong  //ヘッダ全体サイズ
+    //---info header
+    a= INFOHSIZE:gosub *savelong  //header size
+    a= bmpw:gosub *savelong   //width
+    a= bmph:gosub *savelong  //height
+    a= 1:gosub *saveword          //plane
+    a= BITPIX:gosub *saveword     //bitcount
+    a= 0:gosub *savelong
+    a= lDataSize:gosub *savelong  //画像データサイズ
+    a= 0:gosub *savelong
+    a= 0:gosub *savelong
+    a= 0:gosub *savelong
+    a= 0:gosub *savelong
+    //---table
+    a= 0x000000:gosub *savelong //black
+    a= 0x0000ff:gosub *savelong //blue
+    a= 0xff0000:gosub *savelong //red
+    a= 0xff00ff:gosub *savelong //magenta
+    a= 0x00ff00:gosub *savelong //green
+    a= 0xffff00:gosub *savelong //yello
+    a= 0x00ffff:gosub *savelong //cyan
+    a= 0xffffff:gosub *savelong //white
+	for i,0,8
+	    a= 0:gosub *savelong
+	next
+
+    //---画像データ
+	a=0
+	packcnt=0
+	for y,bmph-1,-1,-1
+		for x,0,bmpw,8
+			for i,0,8
+				pget bmpx+x+i,bmpy+y			
+				a = a<<4
+				if(ginfo(16)){	a=a | 2 }
+				if(ginfo(17)){	a=a | 4 }
+				if(ginfo(18)){	a=a | 1 }
+				packcnt+=4
+				if(packcnt>=8){
+					packcnt=0
+					gosub *savebyte
+					a=0
+				}
+			next
+		next
+	next
+	bsave fname,fbuf,fp
+    return
+    
+*savebyte
+	poke fbuf,fp,(a & 0xff)
+	fp++	
+	return
+
+*saveword
+	poke fbuf,fp,(a & 0xff)
+	fp++	
+	poke fbuf,fp,((a>>8) & 0xff)
+	fp++	
+	return
+
+*savelong
+	poke fbuf,fp,(a & 0xff)
+	fp++	
+	poke fbuf,fp,((a>>8) & 0xff)
+	fp++	
+	poke fbuf,fp,((a>>16) & 0xff)
+	fp++	
+	poke fbuf,fp,((a>>24) & 0xff)
+	fp++	
+	return
+	
+	
