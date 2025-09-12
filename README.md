@@ -3,6 +3,7 @@
 RGBLEDを使った電子ゲームです。「トランジスタ技術2017年8月号」別冊付録掲載「高輝度LEDカラー・モニタ付きアーケード・ゲーム」改良版。
 
 ## ファイル
+・rgbledgame_schematics.png：回路図。
 
 ・rgbledshooting.ino：ソース。Arduino IDEで動作。
 
