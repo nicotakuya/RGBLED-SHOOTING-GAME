@@ -1,6 +1,8 @@
 # RGBLED SHOOTING GAME
 ## 概要
-RGBLEDを使った電子ゲームです。「トランジスタ技術2017年8月号」別冊付録掲載「高輝度LEDカラー・モニタ付きアーケード・ゲーム」改良版。
+RGBLEDを使った電子ゲームです。
+
+「トランジスタ技術2017年8月号」別冊付録掲載「高輝度LEDカラー・モニタ付きアーケード・ゲーム」の改良版です。
 
 ## ファイル
 ・rgbledgame_schematics.png：回路図。
@@ -21,10 +23,12 @@ http://akizukidenshi.com/catalog/g/gK-10347/
 https://www.adafruit.com/product/420
 
 ・(SW1/2/3/4)ジョイスティックレバー
-http://akizukidenshi.com/catalog/g/gP-10992/
 
 ・ゲームボタン
 
 ・2x8pin ピンヘッダ	 
 
 ・ニッケル水素電池1.2V x4本	 
+
+## Photo
+![Image](https://github.com/user-attachments/assets/2673a88d-90a0-4ba9-989f-c52d2e24792a)
